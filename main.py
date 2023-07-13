@@ -1,31 +1,23 @@
-import aio_pika
-import asyncio
+from base_service import Service
+from schemas import UserProfileCreate
+from models.user_profile import UserProfile, UserProfile_Pydantic
+from tortoise import Tortoise, run_async
 
-async def main():
-    connection = await aio_pika.connect("amqp://guest:guest@192.168.1.28")
-    channel = await connection.channel()
-    ex = channel.default_exchange
-    q = await channel.declare_queue("user.create")
-    async with q.iterator() as qi:
-        message: aio_pika.abc.AbstractMessage
-        async for message in qi:
-            try:
-                async with message.process(requeue=False):
-                    assert message.reply_to is not None
-                    n = message.body.decode()
-                    response = "abc"
-                    await ex.publish(
-                        aio_pika.Message(
-                            body=response.encode("utf-8"),
-                            correlation_id=message.correlation_id
-                        ),
-                        routing_key=message.reply_to
-                    )
-            except Exception as e:
-                print(e)
+async def on_user_create(data) -> dict:
+    if (await UserProfile.exists(email=data["email"])) or (await UserProfile.exists(username=data["username"])):
+        return {"error": "already exists"}
+    prof = await UserProfile.create(**data)
+    return {"id": str(prof.id), "username": prof.username, "email": prof.email}
 
-                print(message)
-
+async def init():
+    await Tortoise.init(
+        db_url='postgres://miauw_user:miauw_password@192.168.1.28:5432/miauw',
+        modules={'models': ['models']}
+    )
+    await Tortoise.generate_schemas()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_async(init())
+    user_service = Service("amqp://guest:guest@192.168.1.28")
+    user_service.add_event_handler("user.create", on_user_create)
+    user_service.start()

@@ -47,17 +47,19 @@ async def on_user_find(data) -> dict:
 
 
 async def init():
+    user_service.logger.debug("connecting to database")
     await Tortoise.init(
         db_url="postgres://miauw_user:miauw_password@192.168.1.28:5432/miauw",
         modules={"models": ["models"]},
     )
     await Tortoise.generate_schemas()
+    user_service.logger.debug("generating schemas")
 
 
 if __name__ == "__main__":
-    run_async(init())
-    user_service = Service("amqp://guest:guest@192.168.1.28")
+    user_service = Service("user", "amqp://guest:guest@192.168.1.28")
     user_service.add_event_handler("user.create", on_user_create)
     user_service.add_event_handler("user.find.id", on_user_find_id)
     user_service.add_event_handler("user.find", on_user_find)
+    run_async(init())
     user_service.start()

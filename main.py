@@ -1,8 +1,11 @@
-from base_service import Service
+from base_service import BaseService
 from schemas import UserProfileCreate
 from models.user_profile import UserProfile, UserProfile_Pydantic
 from tortoise import Tortoise, run_async
 
+user_service = BaseService("user", "amqp://guest:guest@192.168.1.28")
+
+@user_service.event("user.create")
 async def on_user_create(data) -> dict:
     if (await UserProfile.exists(email=data["email"])) or (
         await UserProfile.exists(username=data["username"])
@@ -17,7 +20,7 @@ async def on_user_create(data) -> dict:
         "updatedAt": prof.updated_at.timestamp(),
     }
 
-
+@user_service.event("user.find.id")
 async def on_user_find_id(data: dict) -> dict:
     user = await UserProfile.get(id=data["id"])
     if not user:
@@ -30,7 +33,7 @@ async def on_user_find_id(data: dict) -> dict:
         "updatedAt": user.updated_at.timestamp(),
     }
 
-
+@user_service.event("user.find")
 async def on_user_find(data) -> dict:
     user = await UserProfile.get(username=data["login"]) or await UserProfile.get(
         email=data["login"]
@@ -57,9 +60,5 @@ async def init():
 
 
 if __name__ == "__main__":
-    user_service = Service("user", "amqp://guest:guest@192.168.1.28")
-    user_service.add_event_handler("user.create", on_user_create)
-    user_service.add_event_handler("user.find.id", on_user_find_id)
-    user_service.add_event_handler("user.find", on_user_find)
     run_async(init())
     user_service.start()

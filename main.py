@@ -1,8 +1,7 @@
-from base_service import BaseService
+from base_service import BaseService, ProblemJSON
 from schemas import UserProfileCreate
 from models.user_profile import UserProfile, UserProfile_Pydantic
 from tortoise import Tortoise, run_async
-from utils import ProblemJSON, check_mail
 
 user_service = BaseService("user", "amqp://guest:guest@192.168.1.28")
 
@@ -10,19 +9,18 @@ user_service = BaseService("user", "amqp://guest:guest@192.168.1.28")
 @user_service.event("user.create")
 async def on_user_create(data) -> dict:
     exists = False
-    if check_mail(data["email"]):
-        email = validate_email(data["email"])
+    if check_mail(data.get("email")):
         exists = await UserProfile.exists(email=data["email"])
     else:
         exists = await UserProfile.exists(username=data["username"])
     if exists:
         return ProblemJSON.build(
             "https://user.miauw.social/user/exists/" + "email"
-            if exists["email"]
+            if check_mail(data.get("email"))
             else "username",
             "User already exists",
             f"""The user with email '{data["email"]}' already exists."""
-            if exists["email"]
+            if check_mail(data.get("email"))
             else f"""The user with username '{data}' already exists.""",
             409,
             {
@@ -68,7 +66,7 @@ async def on_user_find(identifier: str) -> dict:
     if check_mail(identifier):
         user = await UserProfile.get(email=identifier)
     else:
-        user = await UserProfile.exists(username=identifier)
+        user = await UserProfile.get(username=identifier)
     if not user:
         return ProblemJSON.build(
             "https://user.miauw.social/user/not-found",
@@ -76,7 +74,8 @@ async def on_user_find(identifier: str) -> dict:
             f"""User with username '{identifier}' is not found."""
             if not check_mail(identifier)
             else f"""User with email '{identifier}' is not found.""",
-            404
+            404,
+            {"providedInformation": {"identifier": identifier}}
         )
     return {
         "id": str(user.id),
@@ -100,8 +99,4 @@ async def init():
 
 if __name__ == "__main__":
     run_async(init())
-    user_service = Service("amqp://guest:guest@192.168.1.28")
-    user_service.add_event_handler("user.create", on_user_create)
-    user_service.add_event_handler("user.find.id", on_user_find_id)
-    user_service.add_event_handler("user.find", on_user_find)
     user_service.start()

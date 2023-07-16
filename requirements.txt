@@ -11,7 +11,7 @@ fastapi==0.100.0
 h11==0.14.0
 idna==3.4
 iso8601==1.1.0
-miauw-base-service==0.2.1
+miauw-base-service==1.2.0
 multidict==6.0.4
 pamqp==3.2.1
 pydantic==1.10.11
